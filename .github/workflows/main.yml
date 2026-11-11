@@ -1,0 +1,63 @@
+
+name: Compress PDFs and Create ZIP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compress-pdf:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ghostscript zip
+
+      - name: Compress All PDFs
+        run: |
+          mkdir -p compressed-pdfs
+
+          count=0
+
+          while IFS= read -r -d '' file; do
+            output="compressed-pdfs/${file#./}"
+            mkdir -p "$(dirname "$output")"
+
+            gs -sDEVICE=pdfwrite \
+              -dCompatibilityLevel=1.4 \
+              -dPDFSETTINGS=/ebook \
+              -dNOPAUSE \
+              -dQUIET \
+              -dBATCH \
+              -sOutputFile="$output" \
+              "$file"
+
+            count=$((count + 1))
+            echo "Compressed: $file"
+          done < <(find . -type f -iname "*.pdf" \
+            ! -path "./compressed-pdfs/*" -print0)
+
+          if [ "$count" -eq 0 ]; then
+            echo "No PDF files found!"
+            exit 1
+          fi
+
+          echo "Total PDFs compressed: $count"
+
+      - name: Create ZIP File
+        run: |
+          zip -r compressed-pdfs.zip compressed-pdfs
+
+      - name: Upload ZIP for Download
+        uses: actions/upload-artifact@v4
+        with:
+          name: compressed-pdf-files
+          path: compressed-pdfs.zip
+          retention-days: 7
